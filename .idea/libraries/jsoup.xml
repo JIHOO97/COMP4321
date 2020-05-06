@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="jsoup">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/../htmlparser1_6_20060610/htmlparser1_6/lib" />
+      <root url="file://$PROJECT_DIR$/../jsoup-1.13.1" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+    <jarDirectory url="file://$PROJECT_DIR$/../htmlparser1_6_20060610/htmlparser1_6/lib" recursive="false" />
+  </library>
+</component>
