@@ -9,11 +9,7 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLConnection;
 import java.sql.Timestamp;
-import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -34,6 +30,11 @@ public class InvertedIndex
         this.db = RocksDB.open(options, dbPath);
     }
 
+    public RocksDB getDB() {
+        return this.db;
+    }
+
+
     public void addEntry(String word, int x, int y) throws RocksDBException {
         // Add a "docX Y" entry for the key "word" into hashtable
         // ADD YOUR CODES HERE
@@ -43,7 +44,17 @@ public class InvertedIndex
         } else {
             content = (new String(content) + " doc" + x + " " + y).getBytes();
         }
-        db.put(word.getBytes(), content);
+        db.put(word.getBytes(),content);
+    }
+
+    public void addWeight(String doc, String word, double weight) throws RocksDBException {
+        byte[] content = db.get(doc.getBytes());
+        if (content == null) {
+            content = (word + " " + weight).getBytes();
+        }
+        else
+            content = (new String(content) + " " + word + " " + weight).getBytes();
+        db.put(doc.getBytes(),content);
     }
 
     public void addTitle(String title, int x) throws RocksDBException {
@@ -89,6 +100,16 @@ public class InvertedIndex
         }
     }
 
+    public LinkedHashSet<String> getLinks() {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        RocksIterator itr = db.newIterator();
+
+        for(itr.seekToFirst(); itr.isValid(); itr.next()) result.add(new String(itr.key()));
+
+        return result;
+    }
+
+
     public Vector<String> extractWords(String html) throws RocksDBException, IOException {
         Vector<String> result = new Vector<>();
         StopStem process = new StopStem("C:\\Users\\User\\Desktop\\COMP4321\\Phase 1\\COMP4471_Crawler\\stopwords.txt");
@@ -97,9 +118,6 @@ public class InvertedIndex
         bean.setLinks(false);
         String contents = bean.getStrings();
         StringTokenizer st = new StringTokenizer(contents);
-        while (st.hasMoreTokens()) {
-            result.add(st.nextToken());
-        }
         while (st.hasMoreTokens()) {
             result.add(st.nextToken());
         }

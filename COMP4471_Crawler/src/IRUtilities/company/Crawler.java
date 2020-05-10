@@ -21,7 +21,6 @@ import java.util.regex.Pattern;
 // Why use LinkedHashSet? What is a HashSet?
 
 public class Crawler {
-    static Vector<String> pages = new Vector<>();
     static Queue<String> queue = new LinkedList<>();
     static LinkedHashSet<String> marked = new LinkedHashSet<>();
     private Vector<Date> lastModificationDate = new Vector<>();
@@ -32,7 +31,7 @@ public class Crawler {
         queue.add(URL);
         // set of examined web pages
         marked.add(URL);
-        Document doc;
+        Document doc; int index = 0;
 
         // breadth first search crawl of web
         OUTER:
@@ -44,8 +43,6 @@ public class Crawler {
                 try {
                     // fetch HTML code in the URL
                     doc = Jsoup.connect(v).get();
-                    // fetch page of give URL
-                    pages.add(doc.toString());
                     // Parse the HTML to extract links to other URLs
                     Elements questions = doc.select("a[href]");
                     for (Element link : questions) {
@@ -62,7 +59,6 @@ public class Crawler {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-
             }
         }
         return marked;
