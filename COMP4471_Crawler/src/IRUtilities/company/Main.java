@@ -17,7 +17,7 @@ public class Main {
 //        dbReader.saveDocumentWeight(50);
 //        dbReader.saveTitle();
 //        dbReader.getTitle("HKUST");
-        dbReader.showResult("wang tao");
+        dbReader.showResult("dik lun");
 //        dbReader.getTermWeight(docs);
     }
 }
