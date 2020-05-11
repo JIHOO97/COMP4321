@@ -1,8 +1,10 @@
 package IRUtilities.company;
 
-import org.htmlparser.beans.StringBean;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.Connection;
 import org.rocksdb.RocksDB;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
@@ -68,7 +70,7 @@ public class InvertedIndex
         db.put(title.getBytes(), content);
     }
 
-    public void addLink(String link, Date lastModified) throws RocksDBException, ParseException {
+    public void addLink(String link, Date lastModified, int docNumber) throws RocksDBException, ParseException {
         byte[] content = db.get(link.getBytes());
         SimpleDateFormat formatter = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US);
         if (content == null) {
@@ -104,7 +106,9 @@ public class InvertedIndex
         LinkedHashSet<String> result = new LinkedHashSet<>();
         RocksIterator itr = db.newIterator();
 
-        for(itr.seekToFirst(); itr.isValid(); itr.next()) result.add(new String(itr.key()));
+        for(itr.seekToFirst(); itr.isValid(); itr.next()) {
+            result.add(new String(itr.key()));
+        }
 
         return result;
     }
@@ -113,31 +117,43 @@ public class InvertedIndex
     public Vector<String> extractWords(String html) throws RocksDBException, IOException {
         Vector<String> result = new Vector<>();
         StopStem process = new StopStem("C:\\Users\\User\\Desktop\\COMP4321\\Phase 1\\COMP4471_Crawler\\stopwords.txt");
-        StringBean bean = new StringBean();
-        bean.setURL(html);
-        bean.setLinks(false);
-        String contents = bean.getStrings();
-        StringTokenizer st = new StringTokenizer(contents);
-        while (st.hasMoreTokens()) {
-            result.add(st.nextToken());
-        }
+        try {
+            Document doc = Jsoup.connect(html).get();
+            Element isContentNull = doc.body();
+            if (isContentNull != null) {
+//                System.out.println(html);
+                String content = doc.body().text();
+                StringTokenizer st = new StringTokenizer(content);
+                while (st.hasMoreTokens()) {
+                    result.add(st.nextToken());
+                }
 
-        for(int j = 0; j < result.size(); ++j) {
-            if(process.isStopWord(result.get(j))) {
-                result.remove(j);
+                for (int j = 0; j < result.size(); ++j) {
+                    if (process.isStopWord(result.get(j))) {
+                        result.remove(j);
+                    }
+                }
+
+                for (int j = 0; j < result.size(); ++j) {
+                    String temp = process.stem(result.get(j));
+                    result.set(j, temp);
+                }
             }
+            return result;
+        } catch (IOException e) {
+            System.out.println(e + " for this URL: " + html);
+            return result;
         }
-
-        for(int j = 0; j < result.size(); ++j) {
-                String temp = process.stem(result.get(j));
-                result.set(j, temp);
-        }
-        return result;
     }
 
     public String extractTitle(String html) throws IOException {
-        Document doc = Jsoup.connect(String.valueOf(html)).get();
-        String title = doc.title();
-        return title;
+        try {
+            Document doc = Jsoup.connect(String.valueOf(html)).get();
+            String title = doc.title();
+            return title;
+        } catch (IOException e){
+            System.out.println(e);
+            return "";
+        }
     }
 }
