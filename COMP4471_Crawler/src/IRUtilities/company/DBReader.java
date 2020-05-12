@@ -1,5 +1,6 @@
 package IRUtilities.company;
 
+import com.sun.istack.internal.NotNull;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
@@ -12,14 +13,15 @@ import java.util.regex.Pattern;
 
 
 public class DBReader {
-      private InvertedIndex dbLink;
-      private InvertedIndex dbWord;
-      private InvertedIndex dbWeight;
-      private InvertedIndex dbTitle;
-      private Crawler crawler;
-      private RocksDB dbl;
-      private String html;
-      private int pageNumbers;
+    private InvertedIndex dbLink;
+    private InvertedIndex dbWord;
+    private InvertedIndex dbWeight;
+    private InvertedIndex dbTitle;
+    private Crawler crawler;
+    private RocksDB dbl;
+    private String html;
+    private int pageNumbers;
+    private Vector<String> words;
 
     public DBReader(String dbPath1, String dbPath2, String dbPath3, String dbPath4) throws RocksDBException {
         this.dbLink = new InvertedIndex(dbPath1);
@@ -39,6 +41,7 @@ public class DBReader {
         return links;
     }
 
+
     public void saveLink() throws IOException, ParseException, RocksDBException {
         LinkedHashSet<String> links = crawlLinks();
         Vector<Date> lastModDate = this.crawler.getLastModificationDate(links);
@@ -56,7 +59,8 @@ public class DBReader {
             String html = itr.next();
             Vector<String> words = dbWord.extractWords(html);
             for (int i = 0; i < words.size(); ++i) {
-                dbWord.addEntry(words.get(i),docNumber,i);
+                if(!words.get(i).equals(""))
+                    dbWord.addEntry(words.get(i),docNumber,i);
             }
             ++docNumber;
         }
@@ -75,30 +79,41 @@ public class DBReader {
     }
 
     public void saveDocumentWeight() throws IOException, RocksDBException {
+        System.out.println("now inserting document weight");
         LinkedHashSet<String> links = crawlLinks();
-        Vector<Integer> maxTF = getMaxTF();
-        double documentDF, documentTF;
-        Iterator<String> itr = links.iterator(); int index = 0;
-        while(itr.hasNext()) {
-            String doc = "doc" + index;
-            String html = itr.next();
-            HashMap<String,Integer> temp = getDocumentTF(html);
-            // Some html has no content
-            if (temp != null) {
-                for (String i : temp.keySet()) {
-                    // how many documents contain the string i
-//                    System.out.println(i);
-                    documentDF = getDocumentDF(i);
-//                    if(documentDF == 0) System.out.println(html);
-                    // frequency of the term i in the doc(index)
-                    documentTF = temp.get(i);
-                    double docWeight = documentTF * (Math.log(this.pageNumbers / documentDF) / Math.log(2)) / maxTF.get(index);
-                    dbWeight.addWeight(doc, i, docWeight);
+        Iterator<String> linkItr = links.iterator();
+        Vector<Integer> maxTerms = getMaxTF();
+        this.dbl = dbWord.getDB();
+        int docIndex = 0;
+        while(linkItr.hasNext()) {
+            String doc = "doc" + docIndex;
+            String currentDoc = linkItr.next();
+            Vector<String> extractWords = dbWord.extractWords(currentDoc);
+            Set<String> distinctWords = new HashSet<>(extractWords);
+            distinctWords.remove("");
+            Map<String,Integer> wordFreq = new HashMap<>();
+            for(String i : distinctWords) wordFreq.put(i,Collections.frequency(extractWords,i));
+            RocksIterator wordItr = dbl.newIterator();
+            for(String i : wordFreq.keySet()) {
+                String docList = "";
+                for(wordItr.seekToFirst(); wordItr.isValid(); wordItr.next()) {
+                    if(new String(wordItr.key()).equals(i)) {
+                        docList = new String(wordItr.value()); break;
+                    }
                 }
-            } else
-                dbWeight.addWeight(doc,"",0);
-            index++;
+                double tf = wordFreq.get(i); double df;
+                if(getDocumentList(docList) == null) {
+                    this.dbWeight.addWeight(doc,i,0);
+                    System.out.println(doc + " " + i + " " + currentDoc);
+                } else {
+                    df = getDocumentList(docList).size();
+                    double docWeight = tf * (Math.log(this.pageNumbers / df)) / maxTerms.get(docIndex);
+                    this.dbWeight.addWeight(doc,i,docWeight);
+                }
+            }
+            docIndex++;
         }
+
     }
 
     public String getTitle(String query) {
@@ -118,41 +133,128 @@ public class DBReader {
         return result;
     }
 
+    // function for stopword
+    public Vector<String> applyStopWord(String query) {
+        Vector<String> result = new Vector<>();
+
+        StringTokenizer st = new StringTokenizer(query);
+        while (st.hasMoreTokens()) {
+            result.add(st.nextToken());
+        }
+
+        StopStem process = new StopStem("C:\\Users\\User\\Desktop\\COMP4321\\Phase 1\\COMP4471_Crawler\\stopwords.txt");
+        for(int j = 0; j < result.size(); ++j) {
+            if(process.isStopWord(result.get(j))) {
+                result.remove(j);
+            }
+        }
+        for(int j = 0; j < result.size(); ++j) {
+            String temp = process.stem(result.get(j));
+            result.set(j, temp);
+        }
+        return result;
+    }
+
 
 
     // shows the result with respect to the given query
     public List<List<String>> showResult(String query) throws IOException, RocksDBException {
         // shows which documents and its position that contain the query
+        // check if the query is phrase or not
         Vector<String> Query = new Vector<>();
-        StringTokenizer st = new StringTokenizer(query);
-        while (st.hasMoreTokens()) {
-            Query.add(st.nextToken());
-        }
-
-        StopStem process = new StopStem("C:\\Users\\User\\Desktop\\COMP4321\\Phase 1\\COMP4471_Crawler\\stopwords.txt");
-        for(int j = 0; j < Query.size(); ++j) {
-            if(process.isStopWord(Query.get(j))) {
-                Query.remove(j);
-            }
-        }
-        for(int j = 0; j < Query.size(); ++j) {
-            String temp = process.stem(Query.get(j));
-            Query.set(j, temp);
-        }
-
         Vector<String> docs = new Vector<>();
         this.dbl = dbWord.getDB();
+        String fakeQuery = "";
+        boolean isPhrase = false;
+
+        Pattern phrasePattern = Pattern.compile(".*(\"(.+)\").*");
+        Matcher phraseMatcher = phrasePattern.matcher(query);
+        if(phraseMatcher.find()) {
+            isPhrase = true;
+            String phrase = phraseMatcher.group(2);
+            Vector<String> tempQuery = applyStopWord(phrase);
+//            for(String i : tempQuery) System.out.println(i);
+            RocksIterator itr = this.dbl.newIterator();
+            List<String> storeDocs = new ArrayList<>();
+            for (int i = 0; i < tempQuery.size(); ++i) {
+                Query.add(tempQuery.get(i));
+                for(itr.seekToFirst(); itr.isValid(); itr.next()) {
+                    if ((new String(itr.key()).equals(tempQuery.get(i)))) {
+//                        System.out.println(new String(itr.value()));
+                        storeDocs.add(new String(itr.value()));
+                        break;
+                    }
+                }
+            }
+            if(storeDocs.size() < tempQuery.size()) storeDocs.clear();
+            // find phrase
+            List<String> phraseDoc = new ArrayList<>();
+            if(storeDocs.size() > 1) {
+                for(int i = 0; i < storeDocs.size()-1; i++) {
+                    String firstDocs = storeDocs.get(i);
+                    String secDocs = storeDocs.get(i+1);
+                    StringTokenizer st1 = new StringTokenizer(firstDocs);
+                    StringTokenizer st2 = new StringTokenizer(secDocs);
+                    List<String> comp1 = new ArrayList<>();
+                    List<String> comp2 = new ArrayList<>();
+                    while(st1.hasMoreTokens()) comp1.add(st1.nextToken());
+                    while(st2.hasMoreTokens()) comp2.add(st2.nextToken());
+
+                    for(int j = 0; j < comp1.size(); j+=2) {
+                        String compDoc = comp1.get(j); int index, wordPos1, wordPos2;
+                        if(comp2.contains(compDoc)) {
+                            wordPos1 = Integer.parseInt(comp1.get(j+1));
+                            index = comp2.indexOf(compDoc);
+                            for(int k = index; k < comp2.size(); k+=2) {
+                                if(!comp2.get(k).equals(compDoc)) break;
+                                wordPos2 = Integer.parseInt(comp2.get(k+1));
+                                if(wordPos1 == (wordPos2-1)) {
+                                    phraseDoc.add(compDoc); break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for(String i : phraseDoc) {
+//                System.out.println(i);
+                if(!docs.contains(i)) docs.add(i);
+            }
+            fakeQuery = query.replace(phraseMatcher.group(1),"");
+        }
+
+
+        Vector<String> newQuery = new Vector<>();
+        if(isPhrase) {
+            Vector<String> tempQuery = applyStopWord(fakeQuery);
+            for (String i : tempQuery) newQuery.add(i);
+        } else {
+            Vector<String> tempQuery = applyStopWord(query);
+            for(String i : tempQuery) newQuery.add(i);
+        }
+
+
+//        for(String i : docs) System.out.println(i);
+
+        Vector<String> newQueryDocs = new Vector<>();
         RocksIterator itr = this.dbl.newIterator();
-        for (int i = 0; i < Query.size(); ++i) {
+        for (int i = 0; i < newQuery.size(); ++i) {
             for(itr.seekToFirst(); itr.isValid(); itr.next()) {
-                if ((new String(itr.key()).equals(Query.get(i)))) {
-                    docs.add(new String(itr.value())); break;
+                if ((new String(itr.key()).equals(newQuery.get(i)))) {
+                    newQueryDocs.add(new String(itr.value())); break;
                 }
             }
         }
 
-//        Vector<String> hi = dbWord.extractWords("https://www.chinadailyhk.com/articles/14/65/28/1541125674562.html?newsId=52460");
-//        for(String i : hi) System.out.println(i);
+        for(int i = 0; i < newQueryDocs.size(); i++) {
+            List<String> temp = getDocumentList(newQueryDocs.get(i));
+            for(String j : temp) {
+                if(!docs.contains(j))
+                    docs.add(j);
+            }
+        }
+
+        for(String i : newQuery) Query.add(i);
 
 //
 //        for (int i = 0; i < docs.size(); i++) System.out.println(docs.get(i));
@@ -173,7 +275,7 @@ public class DBReader {
 
         LinkedHashSet<String> links = crawlLinks();
         Vector<String> linksInVector = new Vector<>(links);
-//        System.out.println(linksInVector.get(39));
+//        System.out.println(linksInVector.get(22));
 
         // documents with title
         String result = getTitle(query);
@@ -189,11 +291,11 @@ public class DBReader {
         LinkedHashSet<String> matchedLinks = new LinkedHashSet<>();
         for (Integer i : docNumber) matchedLinks.add(linksInVector.get(i));
         for (Integer i : docIndex) {
-//            System.out.println(i);
             matchedLinks.add(linksInVector.get(i));
         }
 
-//        dbWord.printAll();
+//        for(String i : matchedLinks) System.out.println(i);
+
 
         List<List<String>> finalResult = new ArrayList<>();
 
@@ -207,10 +309,15 @@ public class DBReader {
             this.dbl = dbTitle.getDB();
             RocksIterator rockTitle = dbl.newIterator();
             for(rockTitle.seekToFirst(); rockTitle.isValid(); rockTitle.next()) {
-                if(new String(rockTitle.value()).contains(docContainer1.get(index))) {
+                String titleSplitter = new String(rockTitle.value());
+                StringTokenizer st = new StringTokenizer(titleSplitter);
+                List<String> tempTitle = new ArrayList<>();
+                while(st.hasMoreTokens()) tempTitle.add(st.nextToken());
+                if(tempTitle.contains(docContainer1.get(index))) {
                     tempResult.add(new String(rockTitle.key())); index++; break;
                 }
             }
+
 
             // print link
             tempResult.add(html);
@@ -225,12 +332,15 @@ public class DBReader {
             }
 
             // print keywords and frequencies
-            HashMap<String,Integer> tempKeyFreq = getDocumentTF(html);
-            String keyFreq = "";
-            for(String i : tempKeyFreq.keySet()) {
-                keyFreq += i + " " + tempKeyFreq.get(i) + " ";
-            }
-            tempResult.add(keyFreq);
+            Vector<String> keyFreq = dbWord.extractWords(html);
+            HashSet<String> tempKeyFreq = new HashSet<>(keyFreq);
+            tempKeyFreq.remove("");
+            Map<String,Integer> kfResult = new HashMap<>();
+            for(String i : tempKeyFreq) kfResult.put(i,Collections.frequency(keyFreq,i));
+            String kfResusltStr = "";
+            for(String i : kfResult.keySet()) kfResusltStr += (i + " " + kfResult.get(i) + " ");
+            tempResult.add(kfResusltStr);
+
 
             // print parent links
             int parentIndex = linksInVector.indexOf(html);
@@ -245,7 +355,6 @@ public class DBReader {
             tempResult.add(tempParentLink);
             tempResult.add(tempChildLink);
             finalResult.add(tempResult);
-
             if (index == 49) break;
         }
 
@@ -265,7 +374,7 @@ public class DBReader {
         List<String> docs = new ArrayList<>();
         Pattern pattern = Pattern.compile("doc.+");
         StringTokenizer st = new StringTokenizer(docList);
-        String compDoc = "";
+        String compDoc;
         if (st.hasMoreTokens()) compDoc = st.nextToken();
         else return null;
         docs.add(compDoc);
@@ -306,56 +415,13 @@ public class DBReader {
         return mostTF;
     }
 
-    // Store the word and its frequency with given URL
-    // Some contents of the pages can be null
-    public HashMap getDocumentTF(String html) throws IOException, RocksDBException {
-        Vector<String> result = dbWord.extractWords(html);
-        if(!result.isEmpty()) {
-            HashSet<String> temp = new HashSet<>(result);
-            temp.remove("");
-//        System.out.print(temp);
-            HashMap<String, Integer> documentTF = new HashMap<>();
-            for (String s : temp) documentTF.put(s, Collections.frequency(result, s));
-            return documentTF;
-        } else
-            return null;
-    }
 
-    // how many documents contain this word
-    public Integer getDocumentDF(String word) {
-        // get the documents from inverted index correspond to the word
-        String getInvInd = "";
-        this.dbl = dbWord.getDB();
-        RocksIterator itr = this.dbl.newIterator();
-        for(itr.seekToFirst(); itr.isValid(); itr.next()) {
-            if ((new String(itr.key()).equals(word))) {
-                getInvInd = new String(itr.value()); break;
-            }
-        }
-
-        if(getDocumentList(getInvInd) == null) {
-            System.out.println(word + " 화이팅!!");
-            return 0;
-        }
-        else
-            return getDocumentList(getInvInd).size();
-    }
+    public List<String> calculateCosSim(List<String> queryDoc, Vector<String> query) throws IOException, RocksDBException {
+        List<String> docs = queryDoc;
 
 
-    public List<String> calculateCosSim(Vector<String> queryDoc, Vector<String> query) throws IOException, RocksDBException {
-        List<String> docs = new ArrayList<>();
+//        for(String i : queryDoc) System.out.println(i);
 
-        // get the documents that contains the query term
-        for(int i = 0; i < queryDoc.size(); i++) {
-            List<String> temp = getDocumentList(queryDoc.get(i));
-            for(String j : temp) {
-                if(!docs.contains(j))
-                    docs.add(j);
-            }
-        }
-
-//        for (String i : docs) System.out.println(i);
-//        System.out.println();
 
         // calculate the sum of the document weight
         HashMap<String,Double> sum = new HashMap<>();
@@ -441,12 +507,7 @@ public class DBReader {
         List<String> returnDocs = new ArrayList<>();
         for (Map.Entry<String, Double> en : sortedCosSim.entrySet()) {
             returnDocs.add(en.getKey());
-//            System.out.println(en.getKey());
         }
-//        System.out.println();
-
-
-//        for (String i : returnDocs) System.out.println(i);
 
         return returnDocs;
 
@@ -475,15 +536,5 @@ public class DBReader {
         return temp;
     }
 
-    public void isPhrase(String word, int x, int y) {
-        this.dbl = dbWord.getDB();
-        // save all the document number and the position of the number
-        HashMap<String,String> docs = new HashMap<>();
-        RocksIterator itr = this.dbl.newIterator();
-        for(itr.seekToFirst(); itr.isValid(); itr.next()) docs.put(new String(itr.key()), new String(itr.value()));
-
-        // compare if it is a phrase
-
-    }
 
 }

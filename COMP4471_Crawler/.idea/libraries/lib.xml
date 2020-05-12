@@ -2,6 +2,7 @@
   <library name="lib">
     <CLASSES>
       <root url="file://$PROJECT_DIR$/../htmlparser1_6/lib" />
+      <root url="file://$PROJECT_DIR$/../../../jsoup-1.13.1" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />

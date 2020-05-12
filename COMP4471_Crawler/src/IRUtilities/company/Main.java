@@ -19,18 +19,19 @@ public class Main {
 
         dbReader.setLinkAndPN("https://www.cse.ust.hk/", 100);
 
-//        dbReader.saveLink();
-//        dbReader.saveWords();
-//        dbReader.saveDocumentWeight();
-//        dbReader.saveTitle();
-        dbReader.showResult("raymond wong");
-////        dbReader.getTermWeight(docs);
 
-//        Document doc = Jsoup.connect("https://www.chinadailyhk.com/articles/14/65/28/1541125674562.html?newsId=52460").get();
+//        Document doc = Jsoup.connect("https://www.cse.ust.hk/").get();
 ////        String content1 = doc.body().text();
 //        Element content = doc.body();
 //        String content1 = content.text();
 //        System.out.println(content1);
+//        dbReader.saveLink();
+//        dbReader.saveWords();
+//        dbReader.saveDocumentWeight();
+//        dbReader.saveTitle();
+        dbReader.showResult("dean of computer science");
+////        dbReader.getTermWeight(docs);
+
     }
 }
 
