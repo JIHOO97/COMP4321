@@ -70,18 +70,32 @@ public class InvertedIndex
         db.put(title.getBytes(), content);
     }
 
-    public void addLink(String link, Date lastModified, int docNumber) throws RocksDBException, ParseException {
+    public void addLink(String link, Date lastModified, Integer pageSize, int docNumber) throws RocksDBException, ParseException, IOException {
         byte[] content = db.get(link.getBytes());
         SimpleDateFormat formatter = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US);
+        Document doc = Jsoup.connect(link).get();
+        Element isContentNull = doc.body();
+        Vector<String> wordCount = new Vector<>();
+        if(isContentNull != null) {
+            String contentLink = isContentNull.text();
+            StringTokenizer st = new StringTokenizer(contentLink);
+            while(st.hasMoreTokens()) wordCount.add(st.nextToken());
+        }
+        int temp = pageSize.intValue();
+        if(temp == 0) {
+            for(int i = 0; i < wordCount.size(); i++) {
+                temp += wordCount.get(i).length();
+            }
+        }
         if (content == null) {
-            content = (lastModified.toString()).getBytes();
+            content = (lastModified.toString() + " " + temp).getBytes();
         } else {
             Date modifiedDate = formatter.parse(new String(content));
             Timestamp newModified = new Timestamp(lastModified.getTime());
             Timestamp savedModified = new Timestamp(modifiedDate.getTime());
             if (newModified.after(savedModified)) {
                 Date modified = new Date(newModified.getTime());
-                content = (modified.toString()).getBytes();
+                content = (modified.toString() + " " + temp).getBytes();
             }
         }
         db.put(link.getBytes(), content);

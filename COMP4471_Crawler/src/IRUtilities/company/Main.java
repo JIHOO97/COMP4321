@@ -17,7 +17,7 @@ public class Main {
                                          "C:\\Users\\User\\Desktop\\COMP4321\\Phase 1\\COMP4471_Crawler\\dbWeight",
                                          "C:\\Users\\User\\Desktop\\COMP4321\\Phase 1\\COMP4471_Crawler\\dbTitle");
 
-        dbReader.setLinkAndPN("https://www.cse.ust.hk/", 100);
+        dbReader.setLinkAndPN("https://www.cse.ust.hk/", 50);
 
 
 //        Document doc = Jsoup.connect("https://www.cse.ust.hk/").get();
@@ -25,13 +25,12 @@ public class Main {
 //        Element content = doc.body();
 //        String content1 = content.text();
 //        System.out.println(content1);
-//        dbReader.saveLink();
-//        dbReader.saveWords();
-//        dbReader.saveDocumentWeight();
-//        dbReader.saveTitle();
-        dbReader.showResult("dean of computer science");
+        dbReader.saveLink();
+        dbReader.saveWords();
+        dbReader.saveDocumentWeight();
+        dbReader.saveTitle();
+        dbReader.showResult("requirement for computer science");
 ////        dbReader.getTermWeight(docs);
-
     }
 }
 

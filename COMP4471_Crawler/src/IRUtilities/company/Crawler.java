@@ -6,6 +6,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.text.ParseException;
@@ -88,6 +89,18 @@ public class Crawler {
             }
         }
         return this.lastModificationDate;
+    }
+
+    public Vector<Integer> getPageSize(LinkedHashSet<String> link) throws IOException {
+        Vector<Integer> pageSize = new Vector<>();
+        Iterator<String> itr = link.iterator();
+        while(itr.hasNext()) {
+            URL url = new URL(itr.next());
+            URLConnection connection = url.openConnection();
+            if(connection.getContentLength() == -1) pageSize.add(0);
+            else pageSize.add(connection.getContentLength());
+        }
+        return pageSize;
     }
 }
 

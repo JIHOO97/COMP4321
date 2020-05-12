@@ -45,10 +45,11 @@ public class DBReader {
     public void saveLink() throws IOException, ParseException, RocksDBException {
         LinkedHashSet<String> links = crawlLinks();
         Vector<Date> lastModDate = this.crawler.getLastModificationDate(links);
+        Vector<Integer> pageSize = this.crawler.getPageSize(links);
         Iterator<String> itr = links.iterator();
         for (int i = 0; i < lastModDate.size(); ++i) {
             String html = itr.next();
-            this.dbLink.addLink(html,lastModDate.get(i),i);
+            this.dbLink.addLink(html,lastModDate.get(i),pageSize.get(i),i);
         }
     }
 
@@ -355,7 +356,7 @@ public class DBReader {
             tempResult.add(tempParentLink);
             tempResult.add(tempChildLink);
             finalResult.add(tempResult);
-            if (index == 49) break;
+            if (index == 10) break;
         }
 
         for(List<String> temp : finalResult) {
